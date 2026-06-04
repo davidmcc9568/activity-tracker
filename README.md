@@ -15,4 +15,4 @@ A Python CLI application for tracking activities, time spent, and categories.
 
 - Python
 - JSON
-- Git
+  
