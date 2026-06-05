@@ -84,6 +84,41 @@ def show_time_by_category(activities):
         for category, total_duration in category_totals.items():
             print(f"{category}: Total Duration: {total_duration:.2f} hours")
 
+
+def edit_activity(activities):
+    if not activities:
+        print("No activities recorded")
+        return 
+
+    for i, activity in enumerate(activities):
+        print(f"- Task {i + 1}: {activity['category']} - {activity['task_name']} {activity['duration']} hours")
+
+    try:
+        choice = int(input("Enter the task number to edit: "))
+        index = choice - 1
+
+        if index < 0 or index >= len(activities):
+            print("Invalid task number.")
+            return
+
+        activity = activities[index]
+
+        print(f"Editing: {activity['task_name']}")
+
+        new_category = input("Enter new category: ").strip()
+        new_task = input("Enter new task: ").strip()
+        new_duration = get_positive_float("Enter new duration in hours: ")
+
+        activity["category"] = new_category
+        activity["task_name"] = new_task
+        activity["duration"] = new_duration
+
+        save_activities(activities)
+        print("Activity updated.")
+
+    except ValueError:
+        print("Please enter a valid number.")
+
 def delete_activity(activities):
     if not activities:
         print("No activities recorded.")
@@ -116,7 +151,8 @@ while True:
     print("3. Show total time")
     print("4. Show total time by category")
     print("5. Delete activity")
-    print("6. Quit")
+    print("6. Edit activity")
+    print("7. Quit")
 
     choice = input("Choose an option: ")
 
@@ -136,6 +172,9 @@ while True:
         delete_activity(activities)
 
     elif choice == "6":
+        edit_activity(activities)
+
+    elif choice == "7":
         print("Goodbye.")
         break
 

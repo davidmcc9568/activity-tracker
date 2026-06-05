@@ -16,3 +16,9 @@ A Python CLI application for tracking activities, time spent, and categories.
 - Python
 - JSON
   
+## Future Improvements
+
+- Activity editing
+- Date filtering
+- Weekly summaries
+- Web interface
