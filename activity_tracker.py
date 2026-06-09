@@ -1,22 +1,27 @@
 from pathlib import Path
 from datetime import datetime
-import json
+import sqlite3
 
-DATA_FILE = Path(__file__).parent / "activities.json"
+DB_FILE = Path(__file__).parent / "activities.db"
 
-def save_activities(activities):
-    with open(DATA_FILE, "w") as file:
-        json.dump(activities, file, indent=4)
+def create_table():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
 
-def load_activities():
-    try:
-        with open(DATA_FILE, "r") as file:
-            activities = json.load(file)
-        return activities
-    except FileNotFoundError:
-        return []
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_name TEXT, 
+        duration REAL,
+        category TEXT,
+        timestamp TEXT                   
+    )
+    """)
 
-activities = load_activities()
+    conn.commit()
+    conn.close()
+
+create_table()
 
 def get_positive_float(prompt):
     while True:
@@ -29,156 +34,226 @@ def get_positive_float(prompt):
         except ValueError:
             print("Please enter a valid number.")
 
-def add_activity(activities):
+def add_activity():
     print("Add activity selected")
     category = input(f"Enter category: ").strip()
     task = input(f"Enter Task: ").strip()
     duration = get_positive_float("Enter how many hours you committed to this task: ")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    activity_data = {
-        "task_name" : task,
-        "duration" : duration,
-        "category" : category,
-        "timestamp" : timestamp
-    }
-    activities.append(activity_data)
-    save_activities(activities)
 
-def see_activities(activities):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT INTO activities
+    (task_name, duration, category, timestamp)
+    VALUES (?, ?, ?, ?) 
+    """, (task, duration, category, timestamp))
+
+
+    conn.commit()
+    conn.close()
+
+    print("Activity added.")
+
+def see_activities():
     print("View activities selected")
-    if not activities:
-        print("No activities recorded yet.")
-    else:
-        for i, activity in enumerate(activities):
-            print(
-                f"- Task {i + 1}: "
-                f"Category: {activity['category']} | "
-                f"{activity['task_name']} | "
-                f"{activity['duration']} hours | "
-                f"{activity.get('timestamp', 'No timestamp')}"
-            )
 
-def show_total_time(activities):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT * FROM activities
+    ORDER BY id
+    """)
+
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    if not rows:
+        print("No activities recorded yet.")
+        return
+    
+    for row in rows:
+        print(
+            "--------------------------------------------------\n"
+            f"ID: {row[0]} \n"
+            f"Category: {row[3]} \n"
+            f"Task: {row[1]} \n"
+            f"Duration: {row[2]} hours \n"
+            f"Created: {row[4]}\n"
+            "--------------------------------------------------\n"
+        )
+
+def show_total_time():
     print("Show total time selected")
-    if not activities:
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT SUM(duration)
+    FROM activities
+    """)
+
+    total_time = cursor.fetchone()[0]
+
+    conn.close()
+
+    if total_time is None:
         print("No activities recorded.")
     else:
-        total_time = sum(activity['duration'] for activity in activities)
         print(f"Total time committed: {total_time:.2f} hours")
 
-def show_time_by_category(activities):
-    if not activities:
+def show_time_by_category():
+    print("Show total time by category selected")
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT category, SUM(duration)
+    FROM activities
+    GROUP BY category
+    ORDER BY category
+    """)
+
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    if not rows:
         print("No activities recorded.")
-    else:
-        category_totals = {}
+        return
 
-        for activity in activities:
-            duration = activity["duration"]
-            category = activity["category"]
+    for row in rows:
+        category = row[0]
+        total_duration = row[1]
+        print(f"{category}: {total_duration:.2f} hours")
 
-            if category not in category_totals:
-                category_totals[category] = 0
-
-            category_totals[category] += duration
-
-        for category, total_duration in category_totals.items():
-            print(f"{category}: Total Duration: {total_duration:.2f} hours")
-
-
-def edit_activity(activities):
-    if not activities:
-        print("No activities recorded")
-        return 
-
-    for i, activity in enumerate(activities):
-        print(f"- Task {i + 1}: {activity['category']} - {activity['task_name']} {activity['duration']} hours")
+def edit_activity():
+    see_activities()
 
     try:
-        choice = int(input("Enter the task number to edit: "))
-        index = choice - 1
+        activity_id = int(input("Enter the ID of the activity to edit: "))
 
-        if index < 0 or index >= len(activities):
-            print("Invalid task number.")
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT * FROM activities
+        WHERE id = ?
+        """, (activity_id,))
+
+        activity = cursor.fetchone()
+
+        if activity is None:
+            print(f"No activity found with ID {activity_id}.")
+            conn.close()
             return
 
-        activity = activities[index]
-
-        print(f"Editing: {activity['task_name']}")
+        print(
+            f"Editing: {activity[1]} | "
+            f"{activity[3]} | "
+            f"{activity[2]} hours"
+        )
 
         new_category = input("Enter new category: ").strip()
         new_task = input("Enter new task: ").strip()
         new_duration = get_positive_float("Enter new duration in hours: ")
 
-        activity["category"] = new_category
-        activity["task_name"] = new_task
-        activity["duration"] = new_duration
+        cursor.execute("""
+        UPDATE activities
+        SET task_name = ?, duration = ?, category = ?
+        WHERE id = ?
+        """, (new_task, new_duration, new_category, activity_id))
 
-        save_activities(activities)
+        conn.commit()
+        conn.close()
+
         print("Activity updated.")
 
     except ValueError:
         print("Please enter a valid number.")
 
-def delete_activity(activities):
-    if not activities:
-        print("No activities recorded.")
-        return
-    
-    for i, activity in enumerate(activities):
-        print(f"- Task {i + 1}: {activity['category']} - {activity['task_name']} ({activity['duration']} hours) ")
+def delete_activity():
+    see_activities()
 
     try:
-        choice =  int(input("Enter the task number to delete: "))
-        index = choice - 1
+        activity_id = int(input("Enter the ID of the activity to delete: "))
 
-        if index < 0 or index >= len(activities):
-            print("Invalid task number.")
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+        SELECT * FROM activities
+        WHERE id = ?
+        """, (activity_id,))
+
+        activity = cursor.fetchone()
+
+        if activity is None:
+            print(f"No activity found with ID {activity_id}.")
+            conn.close()
             return
 
-        deleted_activity = activities.pop(index)
-        save_activities(activities)
+        cursor.execute("""
+        DELETE FROM activities
+        WHERE id = ?
+        """, (activity_id,))
 
-        print(f"Deleted: {deleted_activity['task_name']}")
-    
+        conn.commit()
+        conn.close()
+
+        print(
+            f"Deleted: {activity[1]} | "
+            f"{activity[3]} | "
+            f"{activity[2]} hours"
+        )
+
     except ValueError:
         print("Please enter a valid number.")
 
-
 while True:
-    print("\nActivity Tracker")
-    print("1. Add activity")
-    print("2. View activities")
-    print("3. Show total time")
-    print("4. Show total time by category")
-    print("5. Delete activity")
-    print("6. Edit activity")
-    print("7. Quit")
+    print(
+        """    ========================
+        Activity Tracker
+    ========================
+    1. Add Activity
+    2. View Activities
+    3. Show total time
+    4. Show category summary
+    5. Delete activity
+    6. Edit activity
+    7. Quit"""
+    )
 
     choice = input("Choose an option: ")
 
     if choice == "1":
-        add_activity(activities)
+        add_activity()
 
     elif choice == "2":
-        see_activities(activities)
+        see_activities()
 
     elif choice == "3":
-        show_total_time(activities)
+        show_total_time()
 
     elif choice == "4":
-        show_time_by_category(activities)
+        show_time_by_category()
 
     elif choice == "5":
-        delete_activity(activities)
+        delete_activity()
 
     elif choice == "6":
-        edit_activity(activities)
+        edit_activity()
 
     elif choice == "7":
         print("Goodbye.")
         break
 
     else:
-        print("Invalid choice. Please select 1, 2, 3, 4, 5 or 6.")
+        print("Invalid choice. Please select 1, 2, 3, 4, 5, 6, or 7.")
 
 
